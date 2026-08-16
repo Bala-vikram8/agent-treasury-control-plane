@@ -1,0 +1,46 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: agent_treasury_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_treasury_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/agent_treasury_test
+      DATABASE_SSL: "false"
+      AGENT_SERVICE_TOKEN: ci_agent_service_token_that_is_long_enough
+      AGENT_ID: routepilot-client
+      OPERATOR_PASSWORD: ci_operator_password
+      SESSION_SECRET: ci_session_secret_that_is_at_least_thirty_two_characters
+      STRIPE_SECRET_KEY: sk_test_not_used_during_ci
+      STRIPE_WEBHOOK_SECRET: whsec_not_used_during_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+      - run: npm run test:smoke

@@ -1,0 +1,59 @@
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: agent_treasury
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agent_treasury"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - treasury_postgres:/var/lib/postgresql/data
+
+  migration:
+    build:
+      context: .
+      target: migration
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@database:5432/agent_treasury
+      DATABASE_SSL: "false"
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: "no"
+
+  application:
+    build:
+      context: .
+      target: runner
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@database:5432/agent_treasury
+      DATABASE_SSL: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      database:
+        condition: service_healthy
+      migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  treasury_postgres:
